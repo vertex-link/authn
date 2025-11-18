@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  authn:
+    build: .
+    container_name: vertex-authn
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=production
+      - CORS_ORIGIN=http://localhost:3000
+      - SESSION_SECRET=${SESSION_SECRET:-change-this-in-production}
+      - SESSION_MAX_AGE=86400000
+      - KV_PATH=/data/authn.db
+      - BCRYPT_ROUNDS=12
+    volumes:
+      - authn-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  authn-data:
+    driver: local

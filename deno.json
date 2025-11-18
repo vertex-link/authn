@@ -1,0 +1,41 @@
+{
+  "tasks": {
+    "dev": "deno run --unstable-kv --allow-net --allow-env --allow-read --allow-write --watch src/main.ts",
+    "start": "deno run --unstable-kv --allow-net --allow-env --allow-read --allow-write src/main.ts",
+    "test": "deno test --unstable-kv --allow-net --allow-env --allow-read --allow-write"
+  },
+  "imports": {
+    "@/": "./src/",
+    "@types/": "./src/types/",
+    "@models/": "./src/models/",
+    "@services/": "./src/services/",
+    "@controllers/": "./src/controllers/",
+    "@middleware/": "./src/middleware/",
+    "@db/": "./src/db/",
+    "@utils/": "./src/utils/",
+    "oak": "https://deno.land/x/oak@v17.1.0/mod.ts",
+    "oak/helpers": "https://deno.land/x/oak@v17.1.0/helpers.ts",
+    "oak-sessions": "https://deno.land/x/oak_sessions@v4.1.9/mod.ts",
+    "djwt": "https://deno.land/x/djwt@v3.0.2/mod.ts",
+    "bcrypt": "https://deno.land/x/bcrypt@v0.4.1/mod.ts",
+    "cors": "https://deno.land/x/cors@v1.2.2/mod.ts",
+    "denomailer": "https://deno.land/x/denomailer@1.6.0/mod.ts",
+    "std/": "https://deno.land/std@0.224.0/",
+    "zod": "https://deno.land/x/zod@v3.22.4/mod.ts"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.unstable"],
+    "strict": true
+  },
+  "fmt": {
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  }
+}
