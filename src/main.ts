@@ -5,13 +5,10 @@
 
 import { Application } from "oak";
 import type { AppState } from "@controllers/AuthController.ts";
+import { config, validateConfig } from "./config.ts";
 import { initKv } from "@db/kv.ts";
 import { authRoutes, userRoutes, authorRoutes } from "@/routes/mod.ts";
 import { corsMiddleware, errorHandler, logger, sessionMiddleware } from "@middleware/mod.ts";
-
-// Load environment variables
-const PORT = parseInt(Deno.env.get("PORT") || "8080");
-const KV_PATH = Deno.env.get("KV_PATH");
 
 console.log(`
 ╔══════════════════════════════════════════════════════════╗
@@ -28,9 +25,18 @@ console.log(`
 ╚══════════════════════════════════════════════════════════╝
 `);
 
+// Validate configuration
+console.log("Validating configuration...");
+try {
+  validateConfig(config);
+} catch (error) {
+  console.error("❌ Configuration validation failed:", error.message);
+  Deno.exit(1);
+}
+
 // Initialize database
 console.log("Initializing Deno KV database...");
-await initKv(KV_PATH);
+await initKv(config.kvPath);
 
 // Create application
 const app = new Application<AppState>();

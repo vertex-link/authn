@@ -174,6 +174,79 @@ export class UserRepository {
   }
 
   /**
+   * Update password hash
+   */
+  async updatePassword(id: string, passwordHash: string): Promise<boolean> {
+    const kv = getKv();
+    const user = await this.findById(id);
+    if (!user) {
+      return false;
+    }
+
+    user.passwordHash = passwordHash;
+    user.updatedAt = new Date();
+    await kv.set(KV_KEYS.USER_BY_ID(id), user);
+
+    return true;
+  }
+
+  /**
+   * Update active status
+   */
+  async updateActiveStatus(id: string, isActive: boolean): Promise<boolean> {
+    const kv = getKv();
+    const user = await this.findById(id);
+    if (!user) {
+      return false;
+    }
+
+    user.isActive = isActive;
+    user.updatedAt = new Date();
+    await kv.set(KV_KEYS.USER_BY_ID(id), user);
+
+    return true;
+  }
+
+  /**
+   * Add role to user
+   */
+  async addRole(id: string, role: string): Promise<boolean> {
+    const kv = getKv();
+    const user = await this.findById(id);
+    if (!user) {
+      return false;
+    }
+
+    if (!user.roles.includes(role)) {
+      user.roles.push(role);
+      user.updatedAt = new Date();
+      await kv.set(KV_KEYS.USER_BY_ID(id), user);
+    }
+
+    return true;
+  }
+
+  /**
+   * Remove role from user
+   */
+  async removeRole(id: string, role: string): Promise<boolean> {
+    const kv = getKv();
+    const user = await this.findById(id);
+    if (!user) {
+      return false;
+    }
+
+    const index = user.roles.indexOf(role);
+    if (index > -1) {
+      user.roles.splice(index, 1);
+      user.updatedAt = new Date();
+      await kv.set(KV_KEYS.USER_BY_ID(id), user);
+    }
+
+    return true;
+  }
+
+  /**
    * Delete user
    */
   async delete(id: string): Promise<boolean> {

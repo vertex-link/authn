@@ -1,26 +1,17 @@
 /**
  * Session and authentication state types
+ * Sessions are managed by Oak sessions middleware
  */
 
-export interface Session {
-  id: string; // Session ID
+export interface SessionData {
   userId: string;
   email: string;
-  createdAt: Date;
-  expiresAt: Date;
+  username: string;
+  roles: string[];
+  loginAttempts: number;
   ipAddress?: string;
   userAgent?: string;
-  lastActivityAt: Date;
-}
-
-export interface SessionData {
-  userId?: string;
-  email?: string;
-  loginAttempts?: number;
-  flash?: {
-    type: "success" | "error" | "info";
-    message: string;
-  };
+  createdAt: number; // timestamp
 }
 
 export interface AuthState {
@@ -40,11 +31,4 @@ export interface AuthResponse {
   };
   message?: string;
   loggedInFromSession?: boolean;
-}
-
-export interface LoginAttempt {
-  email: string;
-  timestamp: Date;
-  success: boolean;
-  ipAddress?: string;
 }

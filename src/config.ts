@@ -14,10 +14,6 @@ export interface Config {
   sessionSecret: string;
   sessionMaxAge: number;
 
-  // JWT (optional)
-  jwtSecret?: string;
-  jwtExpiresIn?: string;
-
   // Database
   kvPath?: string;
 
@@ -45,22 +41,35 @@ function getEnvNumber(key: string, defaultValue: number): number {
   return parsed;
 }
 
+/**
+ * Load and validate configuration
+ * Fails fast if critical environment variables are missing
+ */
 export function loadConfig(): Config {
+  const environment = getEnv("ENVIRONMENT", "development") as Config["environment"];
+
+  // In production, SESSION_SECRET is required
+  let sessionSecret: string;
+  if (environment === "production") {
+    sessionSecret = getEnv("SESSION_SECRET"); // No default - will throw
+  } else {
+    sessionSecret = getEnv("SESSION_SECRET", "dev-secret-DO-NOT-USE-IN-PRODUCTION");
+    if (sessionSecret === "dev-secret-DO-NOT-USE-IN-PRODUCTION") {
+      console.warn("⚠️  WARNING: Using default session secret. Set SESSION_SECRET environment variable!");
+    }
+  }
+
   return {
     // Server
     port: getEnvNumber("PORT", 8080),
-    environment: (getEnv("ENVIRONMENT", "development") as Config["environment"]),
+    environment,
 
     // CORS
     corsOrigin: getEnv("CORS_ORIGIN", "http://localhost:3000"),
 
     // Session
-    sessionSecret: getEnv("SESSION_SECRET", "change-this-secret-in-production"),
+    sessionSecret,
     sessionMaxAge: getEnvNumber("SESSION_MAX_AGE", 86400000), // 24 hours
-
-    // JWT
-    jwtSecret: Deno.env.get("JWT_SECRET"),
-    jwtExpiresIn: Deno.env.get("JWT_EXPIRES_IN") || "7d",
 
     // Database
     kvPath: Deno.env.get("KV_PATH"),
@@ -70,6 +79,33 @@ export function loadConfig(): Config {
     rateLimitWindow: getEnvNumber("RATE_LIMIT_WINDOW", 900000), // 15 minutes
     rateLimitMaxRequests: getEnvNumber("RATE_LIMIT_MAX_REQUESTS", 100),
   };
+}
+
+/**
+ * Validate configuration at startup
+ */
+export function validateConfig(config: Config): void {
+  // Validate environment
+  if (!["development", "production", "test"].includes(config.environment)) {
+    throw new Error(`Invalid ENVIRONMENT: ${config.environment}`);
+  }
+
+  // Validate session secret length
+  if (config.sessionSecret.length < 32) {
+    throw new Error("SESSION_SECRET must be at least 32 characters");
+  }
+
+  // Validate bcrypt rounds
+  if (config.bcryptRounds < 10 || config.bcryptRounds > 15) {
+    throw new Error("BCRYPT_ROUNDS must be between 10 and 15");
+  }
+
+  // Validate rate limiting
+  if (config.rateLimitMaxRequests < 1) {
+    throw new Error("RATE_LIMIT_MAX_REQUESTS must be at least 1");
+  }
+
+  console.log("✓ Configuration validated");
 }
 
 // Export singleton config

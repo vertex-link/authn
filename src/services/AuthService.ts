@@ -1,29 +1,26 @@
 /**
  * Authentication service
- * Ported from studio-prototype with enhancements
+ * Session management handled by Oak sessions middleware
  */
 
 import type { User, UserLogin, UserRegistration } from "@types/User.ts";
-import type { AuthResponse, Session } from "@types/Session.ts";
+import type { AuthResponse } from "@types/Session.ts";
 import { userRepository } from "@db/UserRepository.ts";
-import { sessionRepository } from "@db/SessionRepository.ts";
 import { hashPassword, verifyPassword } from "@utils/crypto.ts";
 import { validateRegistration } from "@utils/validation.ts";
-
-const SESSION_MAX_AGE = parseInt(Deno.env.get("SESSION_MAX_AGE") || "86400000"); // 24 hours
 
 export class AuthService {
   /**
    * Attempt user login
-   * Based on prototype's attemptLogin function
+   * Returns user data on success, error on failure
    */
-  async attemptLogin(
-    credentials: UserLogin,
-    metadata?: { ipAddress?: string; userAgent?: string },
-  ): Promise<AuthResponse> {
+  async attemptLogin(credentials: UserLogin): Promise<AuthResponse> {
     try {
+      // Normalize email
+      const email = credentials.email.toLowerCase().trim();
+
       // Find user by email
-      const user = await userRepository.findByEmail(credentials.email);
+      const user = await userRepository.findByEmail(email);
 
       if (!user) {
         return {
@@ -56,14 +53,6 @@ export class AuthService {
       // Update last login time
       await userRepository.updateLastLogin(user.id);
 
-      // Create session
-      const session = await sessionRepository.create(
-        user.id,
-        user.email,
-        SESSION_MAX_AGE,
-        metadata,
-      );
-
       return {
         success: true,
         authorized: true,
@@ -85,12 +74,15 @@ export class AuthService {
 
   /**
    * Attempt user registration
-   * Based on prototype's attemptRegistration function
    */
   async attemptRegistration(data: UserRegistration): Promise<AuthResponse> {
     try {
+      // Normalize email
+      const email = data.email.toLowerCase().trim();
+      const username = data.username.trim();
+
       // Validate registration data
-      const validation = validateRegistration(data.username, data.email, data.password);
+      const validation = validateRegistration(username, email, data.password);
       if (!validation.valid) {
         return {
           success: false,
@@ -100,7 +92,7 @@ export class AuthService {
       }
 
       // Check if user already exists
-      const existingUser = await userRepository.findByEmail(data.email);
+      const existingUser = await userRepository.findByEmail(email);
       if (existingUser) {
         return {
           success: false,
@@ -110,7 +102,7 @@ export class AuthService {
       }
 
       // Check if username is taken
-      const existingUsername = await userRepository.findByUsername(data.username);
+      const existingUsername = await userRepository.findByUsername(username);
       if (existingUsername) {
         return {
           success: false,
@@ -124,8 +116,8 @@ export class AuthService {
 
       // Create user
       const user = await userRepository.create({
-        username: data.username,
-        email: data.email,
+        username,
+        email,
         password: data.password, // not used, just for type compatibility
         passwordHash,
       });
@@ -151,48 +143,10 @@ export class AuthService {
   }
 
   /**
-   * Check if user is authenticated via session
+   * Get user by ID (for session validation)
    */
-  async isUserAuthenticated(sessionId?: string): Promise<boolean> {
-    if (!sessionId) {
-      return false;
-    }
-
-    const session = await sessionRepository.findById(sessionId);
-    return session !== null;
-  }
-
-  /**
-   * Get user from session
-   */
-  async getUserFromSession(sessionId: string): Promise<User | null> {
-    const session = await sessionRepository.findById(sessionId);
-    if (!session) {
-      return null;
-    }
-
-    return await userRepository.findById(session.userId);
-  }
-
-  /**
-   * Logout user (delete session)
-   */
-  async logout(sessionId: string): Promise<boolean> {
-    return await sessionRepository.delete(sessionId);
-  }
-
-  /**
-   * Logout all user sessions
-   */
-  async logoutAll(userId: string): Promise<number> {
-    return await sessionRepository.deleteByUserId(userId);
-  }
-
-  /**
-   * Extend session expiration
-   */
-  async extendSession(sessionId: string): Promise<Session | null> {
-    return await sessionRepository.extend(sessionId, SESSION_MAX_AGE);
+  async getUserById(userId: string): Promise<User | null> {
+    return await userRepository.findById(userId);
   }
 }
 

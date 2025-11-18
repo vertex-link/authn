@@ -1,6 +1,6 @@
 /**
  * Authentication controllers
- * Based on studio-prototype auth controllers
+ * Sessions managed via Oak sessions middleware
  */
 
 import type { Context } from "oak";
@@ -19,14 +19,33 @@ export interface AppState {
 }
 
 /**
+ * Create session data from user information
+ */
+function createSessionData(
+  user: { id: string; email: string; username: string },
+  roles: string[],
+  metadata?: { ipAddress?: string; userAgent?: string },
+): SessionData {
+  return {
+    userId: user.id,
+    email: user.email,
+    username: user.username,
+    roles,
+    loginAttempts: 0,
+    ipAddress: metadata?.ipAddress,
+    userAgent: metadata?.userAgent,
+    createdAt: Date.now(),
+  };
+}
+
+/**
  * Login handler
- * Based on prototype's login controller
  */
 export async function login(ctx: Context<AppState>) {
   try {
     const body = await ctx.request.body.json();
     const credentials: UserLogin = {
-      email: body.email || body.mail, // Support both field names
+      email: body.email || body.mail,
       password: body.password,
     };
 
@@ -40,45 +59,61 @@ export async function login(ctx: Context<AppState>) {
     }
 
     // Check if already logged in via session
-    const sessionData = ctx.state.session.get("data") as SessionData | undefined;
-    if (sessionData?.email && sessionData?.userId) {
+    const existingSession = ctx.state.session.get("data") as SessionData | undefined;
+    if (existingSession?.userId && existingSession?.email) {
       ctx.response.status = 200;
       ctx.response.body = {
         success: true,
         authorized: true,
         loggedInFromSession: true,
         user: {
-          id: sessionData.userId,
-          email: sessionData.email,
+          id: existingSession.userId,
+          email: existingSession.email,
+          username: existingSession.username,
         },
       };
       return;
     }
 
-    // Get client metadata
-    const ipAddress = ctx.request.ip;
-    const userAgent = ctx.request.headers.get("user-agent") || undefined;
-
     // Attempt login
-    const result = await authService.attemptLogin(credentials, { ipAddress, userAgent });
+    const result = await authService.attemptLogin(credentials);
 
     if (result.success && result.user) {
-      // Store in session
-      ctx.state.session.set("data", {
-        userId: result.user.id,
-        email: result.user.email,
-        loginAttempts: 0,
-      });
+      // Get full user data for roles
+      const user = await userService.getUser(result.user.id);
+      if (!user) {
+        ctx.response.status = 500;
+        ctx.response.body = {
+          success: false,
+          message: "Internal server error",
+        };
+        return;
+      }
+
+      // Get client metadata
+      const ipAddress = ctx.request.ip;
+      const userAgent = ctx.request.headers.get("user-agent") || undefined;
+
+      // Create complete session
+      const sessionData = createSessionData(
+        result.user,
+        user.roles,
+        { ipAddress, userAgent },
+      );
+
+      ctx.state.session.set("data", sessionData);
 
       ctx.response.status = 200;
       ctx.response.body = result;
     } else {
-      // Increment failed login attempts
-      const attempts = (sessionData?.loginAttempts || 0) + 1;
-      ctx.state.session.set("data", {
-        ...sessionData,
-        loginAttempts: attempts,
-      });
+      // Track failed login attempts
+      const attempts = (existingSession?.loginAttempts || 0) + 1;
+      if (existingSession) {
+        ctx.state.session.set("data", {
+          ...existingSession,
+          loginAttempts: attempts,
+        });
+      }
 
       ctx.response.status = 401;
       ctx.response.body = result;
@@ -118,7 +153,6 @@ export async function logout(ctx: Context<AppState>) {
 
 /**
  * Registration handler
- * Based on prototype's registration controller
  */
 export async function register(ctx: Context<AppState>) {
   try {
@@ -144,17 +178,6 @@ export async function register(ctx: Context<AppState>) {
       return;
     }
 
-    // Check username availability
-    const isAvailable = await userService.isUsernameAvailable(body.username);
-    if (!isAvailable) {
-      ctx.response.status = 400;
-      ctx.response.body = {
-        success: false,
-        message: "Username is already taken",
-      };
-      return;
-    }
-
     const userData: UserRegistration = {
       username: body.username,
       email: body.email || body.mail,
@@ -164,7 +187,31 @@ export async function register(ctx: Context<AppState>) {
     // Attempt registration
     const result = await authService.attemptRegistration(userData);
 
-    if (result.success) {
+    if (result.success && result.user) {
+      // Get full user data for roles
+      const user = await userService.getUser(result.user.id);
+      if (!user) {
+        ctx.response.status = 500;
+        ctx.response.body = {
+          success: false,
+          message: "Internal server error",
+        };
+        return;
+      }
+
+      // Get client metadata
+      const ipAddress = ctx.request.ip;
+      const userAgent = ctx.request.headers.get("user-agent") || undefined;
+
+      // Create session for newly registered user (auto-login)
+      const sessionData = createSessionData(
+        result.user,
+        user.roles,
+        { ipAddress, userAgent },
+      );
+
+      ctx.state.session.set("data", sessionData);
+
       ctx.response.status = 201;
       ctx.response.body = result;
     } else {
@@ -189,14 +236,11 @@ export async function getAuthState(ctx: Context<AppState>) {
     const sessionData = ctx.state.session.get("data") as SessionData | undefined;
 
     if (sessionData?.userId && sessionData?.email) {
-      // Get user to check roles
-      const user = await userService.getUser(sessionData.userId);
-
       const authState: AuthState = {
         authorized: true,
         userId: sessionData.userId,
         email: sessionData.email,
-        roles: user?.roles,
+        roles: sessionData.roles,
       };
 
       ctx.response.status = 200;

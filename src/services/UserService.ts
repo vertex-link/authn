@@ -101,55 +101,22 @@ export class UserService {
     // Hash new password
     const newHash = await hashPassword(newPassword);
 
-    // Update user
-    await userRepository.update(id, { email: user.email });
-
-    // We need to update the password hash directly since UserUpdate doesn't include it
-    const kv = await import("@db/kv.ts").then(m => m.getKv());
-    const KV_KEYS = await import("@db/kv.ts").then(m => m.KV_KEYS);
-    user.passwordHash = newHash;
-    user.updatedAt = new Date();
-    await kv.set(KV_KEYS.USER_BY_ID(id), user);
-
-    return true;
+    // Update password using repository
+    return await userRepository.updatePassword(id, newHash);
   }
 
   /**
    * Deactivate user account
    */
   async deactivateUser(id: string): Promise<boolean> {
-    const user = await userRepository.findById(id);
-    if (!user) {
-      return false;
-    }
-
-    user.isActive = false;
-    user.updatedAt = new Date();
-
-    const kv = await import("@db/kv.ts").then(m => m.getKv());
-    const KV_KEYS = await import("@db/kv.ts").then(m => m.KV_KEYS);
-    await kv.set(KV_KEYS.USER_BY_ID(id), user);
-
-    return true;
+    return await userRepository.updateActiveStatus(id, false);
   }
 
   /**
    * Reactivate user account
    */
   async reactivateUser(id: string): Promise<boolean> {
-    const user = await userRepository.findById(id);
-    if (!user) {
-      return false;
-    }
-
-    user.isActive = true;
-    user.updatedAt = new Date();
-
-    const kv = await import("@db/kv.ts").then(m => m.getKv());
-    const KV_KEYS = await import("@db/kv.ts").then(m => m.KV_KEYS);
-    await kv.set(KV_KEYS.USER_BY_ID(id), user);
-
-    return true;
+    return await userRepository.updateActiveStatus(id, true);
   }
 
   /**
@@ -177,43 +144,14 @@ export class UserService {
    * Add role to user
    */
   async addRole(id: string, role: string): Promise<boolean> {
-    const user = await userRepository.findById(id);
-    if (!user) {
-      return false;
-    }
-
-    if (!user.roles.includes(role)) {
-      user.roles.push(role);
-      user.updatedAt = new Date();
-
-      const kv = await import("@db/kv.ts").then(m => m.getKv());
-      const KV_KEYS = await import("@db/kv.ts").then(m => m.KV_KEYS);
-      await kv.set(KV_KEYS.USER_BY_ID(id), user);
-    }
-
-    return true;
+    return await userRepository.addRole(id, role);
   }
 
   /**
    * Remove role from user
    */
   async removeRole(id: string, role: string): Promise<boolean> {
-    const user = await userRepository.findById(id);
-    if (!user) {
-      return false;
-    }
-
-    const index = user.roles.indexOf(role);
-    if (index > -1) {
-      user.roles.splice(index, 1);
-      user.updatedAt = new Date();
-
-      const kv = await import("@db/kv.ts").then(m => m.getKv());
-      const KV_KEYS = await import("@db/kv.ts").then(m => m.KV_KEYS);
-      await kv.set(KV_KEYS.USER_BY_ID(id), user);
-    }
-
-    return true;
+    return await userRepository.removeRole(id, role);
   }
 }
 
