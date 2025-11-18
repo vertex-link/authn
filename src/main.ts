@@ -8,7 +8,13 @@ import type { AppState } from "@controllers/AuthController.ts";
 import { config, validateConfig } from "./config.ts";
 import { initKv } from "@db/kv.ts";
 import { authRoutes, userRoutes, authorRoutes } from "@/routes/mod.ts";
-import { corsMiddleware, errorHandler, logger, sessionMiddleware } from "@middleware/mod.ts";
+import {
+  corsMiddleware,
+  errorHandler,
+  logger,
+  rateLimitByIp,
+  sessionMiddleware,
+} from "@middleware/mod.ts";
 
 console.log(`
 ╔══════════════════════════════════════════════════════════╗
@@ -49,6 +55,9 @@ app.use(logger);
 
 // CORS middleware
 app.use(corsMiddleware);
+
+// Rate limiting (before session to prevent session creation spam)
+app.use(rateLimitByIp);
 
 // Session middleware
 app.use(sessionMiddleware);

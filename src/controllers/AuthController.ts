@@ -8,6 +8,11 @@ import type { UserLogin, UserRegistration } from "@types/User.ts";
 import type { SessionData, AuthState } from "@types/Session.ts";
 import { authService } from "@services/AuthService.ts";
 import { userService } from "@services/UserService.ts";
+import {
+  rateLimitLogin,
+  recordFailedLogin,
+  clearLoginAttempts,
+} from "@middleware/rateLimit.ts";
 
 export interface AppState {
   session: {
@@ -58,6 +63,9 @@ export async function login(ctx: Context<AppState>) {
       return;
     }
 
+    // Normalize email for rate limiting
+    const normalizedEmail = credentials.email.toLowerCase().trim();
+
     // Check if already logged in via session
     const existingSession = ctx.state.session.get("data") as SessionData | undefined;
     if (existingSession?.userId && existingSession?.email) {
@@ -75,10 +83,24 @@ export async function login(ctx: Context<AppState>) {
       return;
     }
 
+    // Check rate limit for this email
+    const rateLimit = await rateLimitLogin(normalizedEmail);
+    if (!rateLimit.allowed) {
+      ctx.response.status = 429;
+      ctx.response.body = {
+        success: false,
+        message: `Too many failed login attempts. Please try again in ${Math.ceil((rateLimit.remainingSeconds || 0) / 60)} minutes.`,
+      };
+      return;
+    }
+
     // Attempt login
     const result = await authService.attemptLogin(credentials);
 
     if (result.success && result.user) {
+      // Clear login attempts on successful login
+      await clearLoginAttempts(normalizedEmail);
+
       // Get full user data for roles
       const user = await userService.getUser(result.user.id);
       if (!user) {
@@ -106,14 +128,8 @@ export async function login(ctx: Context<AppState>) {
       ctx.response.status = 200;
       ctx.response.body = result;
     } else {
-      // Track failed login attempts
-      const attempts = (existingSession?.loginAttempts || 0) + 1;
-      if (existingSession) {
-        ctx.state.session.set("data", {
-          ...existingSession,
-          loginAttempts: attempts,
-        });
-      }
+      // Record failed login attempt
+      await recordFailedLogin(normalizedEmail);
 
       ctx.response.status = 401;
       ctx.response.body = result;
